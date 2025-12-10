@@ -36,7 +36,7 @@ Perfect for recipe boxes, flash cards, quizzes, selectors, photo stacks, or clas
 
 ```yaml
 dependencies:
-  recipe_card_stack: ^0.0.1
+  recipe_card_stack: ^0.0.2
 
 ---
 
