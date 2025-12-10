@@ -2,7 +2,7 @@ name: recipe_card_stack
 description: A smooth, swipeable stacked-card widget with tap-to-focus, infinite looping and customizable card layouts.
 
 
-version: 0.0.3
+version: 0.0.4
 
 repository: https://github.com/marcoazeem/recipe_card_stack
 issue_tracker: https://github.com/marcoazeem/recipe_card_stack/issues
