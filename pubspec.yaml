@@ -1,0 +1,30 @@
+name: recipe_card_stack
+description: >
+  A smooth, swipeable stacked-card widget with visible tabs, infinite looping,
+  tap-to-focus selection, and fully customizable card UI. Perfect for recipes,
+  flashcards, and index-style card layouts.
+
+version: 0.0.1
+
+repository: https://github.com/marcoazeem/recipe_card_stack
+issue_tracker: https://github.com/marcoazeem/recipe_card_stack/issues
+
+topics:
+  - cards
+  - swipe
+  - stack
+  - ui
+  - selector
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
