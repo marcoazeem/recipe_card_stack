@@ -4,7 +4,7 @@ description: >
   tap-to-focus selection, and fully customizable card UI. Perfect for recipes,
   flashcards, and index-style card layouts.
 
-version: 0.0.1
+version: 0.0.2
 
 repository: https://github.com/marcoazeem/recipe_card_stack
 issue_tracker: https://github.com/marcoazeem/recipe_card_stack/issues

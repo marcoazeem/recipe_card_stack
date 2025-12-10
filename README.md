@@ -28,7 +28,7 @@ Perfect for recipe boxes, flash cards, quizzes, selectors, photo stacks, or clas
 
 ## 🎥 Demo
 
-in assets folder
+![Demo](assets/demo.gif)
 
 ---
 
