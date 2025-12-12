@@ -3,12 +3,8 @@ library recipe_card_stack;
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
-/// Directions a card can be swiped.
 enum SwipeDirection { left, right, up, down }
 
-/// Builds a card for the given [item].
-///
-/// [isFrontCard] is `true` when this card is on top and in focus.
 typedef CardBuilder<T> = Widget Function(
   BuildContext context,
   T item,
@@ -16,20 +12,12 @@ typedef CardBuilder<T> = Widget Function(
   bool isFrontCard,
 );
 
-/// Called whenever the top card is swiped away.
 typedef OnSwipe<T> = void Function(
   int index,
   SwipeDirection direction,
   T item,
 );
 
-/// A swipeable, infinitely looping stack of cards.
-///
-/// Features:
-/// - Top card is draggable (left/right by default)
-/// - Cards behind are visible as "tabs"
-/// - Swipe animates card off-screen and advances to the next item
-/// - Tapping a back card brings it to the front
 class InfiniteSwipeCardStack<T> extends StatefulWidget {
   const InfiniteSwipeCardStack({
     super.key,
@@ -44,31 +32,22 @@ class InfiniteSwipeCardStack<T> extends StatefulWidget {
       SwipeDirection.left,
       SwipeDirection.right,
     },
+    this.stackAnimationDuration = const Duration(milliseconds: 220),
+    this.swipeAnimationDuration = const Duration(milliseconds: 280),
   });
 
-  /// Items to display.
   final List<T> items;
-
-  /// Builder for each card.
   final CardBuilder<T> cardBuilder;
-
-  /// Callback when the top card is swiped away.
   final OnSwipe<T>? onSwipe;
 
-  /// Maximum number of cards visible at once.
   final int maxVisibleCards;
-
-  /// Drag distance required to count as a swipe.
   final double swipeThreshold;
-
-  /// How much each card shrinks behind the previous.
   final double scaleGap;
-
-  /// Vertical offset between stacked cards.
   final double verticalGap;
-
-  /// Allowed swipe directions.
   final Set<SwipeDirection> allowDirections;
+
+  final Duration stackAnimationDuration;
+  final Duration swipeAnimationDuration;
 
   @override
   State<InfiniteSwipeCardStack<T>> createState() =>
@@ -77,13 +56,13 @@ class InfiniteSwipeCardStack<T> extends StatefulWidget {
 
 class _InfiniteSwipeCardStackState<T> extends State<InfiniteSwipeCardStack<T>>
     with SingleTickerProviderStateMixin {
-  /// Index of the front card (looped with modulo).
   int _currentIndex = 0;
 
-  late AnimationController _controller;
-  late Animation<Offset> _animation;
+  late final AnimationController _controller;
+  late Animation<Offset> _offsetAnim;
 
-  Offset _dragOffset = Offset.zero;
+  final ValueNotifier<Offset> _dragOffset = ValueNotifier<Offset>(Offset.zero);
+
   bool _isAnimating = false;
   SwipeDirection? _swipeDirection;
 
@@ -92,52 +71,63 @@ class _InfiniteSwipeCardStackState<T> extends State<InfiniteSwipeCardStack<T>>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 220),
+      duration: widget.swipeAnimationDuration,
     );
 
-    _animation = Tween<Offset>(
-      begin: Offset.zero,
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
+    _offsetAnim = Tween<Offset>(begin: Offset.zero, end: Offset.zero).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
     )
       ..addListener(() {
-        setState(() {
-          _dragOffset = _animation.value;
-        });
+        _dragOffset.value = _offsetAnim.value;
       })
-      ..addStatusListener(_onAnimationStatusChange);
-  }
+      ..addStatusListener((status) {
+        if (status == AnimationStatus.completed && _isAnimating) {
+          final direction = _swipeDirection;
 
-  void _onAnimationStatusChange(AnimationStatus status) {
-    if (status == AnimationStatus.completed && _isAnimating) {
-      final direction = _swipeDirection;
-      if (direction != null && widget.items.isNotEmpty) {
-        final idx = _currentIndex % widget.items.length;
-        widget.onSwipe?.call(idx, direction, widget.items[idx]);
-      }
+          if (direction != null && widget.items.isNotEmpty) {
+            final idx = _currentIndex % widget.items.length;
+            widget.onSwipe?.call(idx, direction, widget.items[idx]);
+          }
 
-      setState(() {
-        _dragOffset = Offset.zero;
-        _isAnimating = false;
-        _swipeDirection = null;
-        if (widget.items.isNotEmpty) {
-          _currentIndex = (_currentIndex + 1) % widget.items.length;
+          if (!mounted) return;
+          setState(() {
+            _dragOffset.value = Offset.zero;
+            _isAnimating = false;
+            _swipeDirection = null;
+
+            if (widget.items.isNotEmpty) {
+              _currentIndex = (_currentIndex + 1) % widget.items.length;
+            }
+          });
         }
       });
+  }
+
+  @override
+  void didUpdateWidget(covariant InfiniteSwipeCardStack<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.swipeAnimationDuration != widget.swipeAnimationDuration) {
+      _controller.duration = widget.swipeAnimationDuration;
+    }
+    // Handle item list changes safely
+    if (widget.items.isEmpty) {
+      _currentIndex = 0;
+    } else {
+      _currentIndex = _currentIndex % widget.items.length;
     }
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _dragOffset.dispose();
     super.dispose();
   }
 
-  /// Bring a card with the given [itemIndex] to the front.
   void _jumpToIndex(int itemIndex) {
     if (_isAnimating || widget.items.isEmpty) return;
     setState(() {
+      _dragOffset.value = Offset.zero;
       _currentIndex = itemIndex % widget.items.length;
     });
   }
@@ -147,9 +137,9 @@ class _InfiniteSwipeCardStackState<T> extends State<InfiniteSwipeCardStack<T>>
     if (widget.items.isEmpty) return const SizedBox.shrink();
 
     final visibleCount = math.min(widget.maxVisibleCards, widget.items.length);
-
     final children = <Widget>[];
 
+    // Build from front (0) to back (visibleCount-1)
     for (int depth = 0; depth < visibleCount; depth++) {
       final itemIndex = (_currentIndex + depth) % widget.items.length;
       final item = widget.items[itemIndex];
@@ -158,38 +148,42 @@ class _InfiniteSwipeCardStackState<T> extends State<InfiniteSwipeCardStack<T>>
       final offsetY = widget.verticalGap * depth;
       final isFront = depth == 0;
 
-      Widget cardChild;
+      // FIX: The last card in the stack (the one wrapping around)
+      // must snap instantly to position, otherwise it animates from Scale 1.0 (Front)
+      // down to Scale 0.8 (Back) *behind* the new front card, causing ghosting.
+      final isBottomCard = depth == visibleCount - 1;
+      final duration =
+          isBottomCard ? Duration.zero : widget.stackAnimationDuration;
 
-      if (isFront) {
-        cardChild = _buildDraggableCard(
-          child: widget.cardBuilder(
-            context,
-            item,
-            itemIndex,
-            true,
-          ),
-        );
-      } else {
-        // Back cards: tap to bring to front.
-        cardChild = GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: () => _jumpToIndex(itemIndex),
-          child: widget.cardBuilder(
-            context,
-            item,
-            itemIndex,
-            false,
-          ),
-        );
-      }
-
-      final card = Transform.translate(
-        offset: Offset(0, offsetY),
-        child: Transform.scale(
-          scale: scale,
-          alignment: Alignment.topCenter,
-          child: cardChild,
+      final cardChild = _CardInteractor(
+        isFront: isFront,
+        dragOffset: _dragOffset,
+        canInteract: () => !_isAnimating,
+        onTap: () => _jumpToIndex(itemIndex),
+        onDragUpdate: (delta) {
+          if (!isFront || _isAnimating) return;
+          final current = _dragOffset.value;
+          final next = current + delta;
+          _dragOffset.value = Offset.lerp(current, next, 0.55)!;
+        },
+        onDragEnd: (velocity) {
+          if (!isFront || _isAnimating) return;
+          _handlePanEnd(velocity);
+        },
+        child: RepaintBoundary(
+          child: widget.cardBuilder(context, item, itemIndex, isFront),
         ),
+      );
+
+      final card = AnimatedContainer(
+        key: ValueKey<int>(itemIndex),
+        duration: duration, // <--- Use the conditional duration
+        curve: Curves.easeOutCubic,
+        transform: Matrix4.identity()
+          ..translate(0.0, offsetY)
+          ..scale(scale, scale),
+        transformAlignment: Alignment.topCenter,
+        child: cardChild,
       );
 
       children.add(card);
@@ -197,35 +191,14 @@ class _InfiniteSwipeCardStackState<T> extends State<InfiniteSwipeCardStack<T>>
 
     return Stack(
       alignment: Alignment.topCenter,
+      // Render back cards first, front card last
       children: children.reversed.toList(),
     );
   }
 
-  Widget _buildDraggableCard({required Widget child}) {
-    return GestureDetector(
-      onPanUpdate: (details) {
-        if (_isAnimating) return;
-        setState(() {
-          _dragOffset += details.delta;
-        });
-      },
-      onPanEnd: (details) {
-        if (_isAnimating) return;
-        _handlePanEnd(details.velocity.pixelsPerSecond);
-      },
-      child: Transform.translate(
-        offset: _dragOffset,
-        child: Transform.rotate(
-          angle: _dragOffset.dx * 0.0008,
-          child: child,
-        ),
-      ),
-    );
-  }
-
   void _handlePanEnd(Offset velocity) {
-    final dx = _dragOffset.dx;
-    final dy = _dragOffset.dy;
+    final dx = _dragOffset.value.dx;
+    final dy = _dragOffset.value.dy;
     final absDx = dx.abs();
     final absDy = dy.abs();
 
@@ -250,16 +223,16 @@ class _InfiniteSwipeCardStackState<T> extends State<InfiniteSwipeCardStack<T>>
 
     switch (direction) {
       case SwipeDirection.left:
-        targetOffset = Offset(-size.width * 1.2, dy);
+        targetOffset = Offset(-size.width * 1.5, dy);
         break;
       case SwipeDirection.right:
-        targetOffset = Offset(size.width * 1.2, dy);
+        targetOffset = Offset(size.width * 1.5, dy);
         break;
       case SwipeDirection.up:
-        targetOffset = Offset(dx, -size.height * 1.2);
+        targetOffset = Offset(dx, -size.height * 1.5);
         break;
       case SwipeDirection.down:
-        targetOffset = Offset(dx, size.height * 1.2);
+        targetOffset = Offset(dx, size.height * 1.5);
         break;
     }
 
@@ -267,15 +240,64 @@ class _InfiniteSwipeCardStackState<T> extends State<InfiniteSwipeCardStack<T>>
   }
 
   void _animateTo(Offset target) {
-    _animation = Tween<Offset>(
-      begin: _dragOffset,
+    _offsetAnim = Tween<Offset>(
+      begin: _dragOffset.value,
       end: target,
     ).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
     );
 
     _controller
       ..reset()
       ..forward();
+  }
+}
+
+class _CardInteractor extends StatelessWidget {
+  const _CardInteractor({
+    required this.isFront,
+    required this.dragOffset,
+    required this.onTap,
+    required this.onDragUpdate,
+    required this.onDragEnd,
+    required this.child,
+    required this.canInteract,
+  });
+
+  final bool isFront;
+  final ValueNotifier<Offset> dragOffset;
+  final VoidCallback onTap;
+  final void Function(Offset delta) onDragUpdate;
+  final void Function(Offset velocity) onDragEnd;
+  final Widget child;
+  final bool Function() canInteract;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: isFront ? null : onTap,
+      onPanUpdate:
+          isFront && canInteract() ? (d) => onDragUpdate(d.delta) : null,
+      onPanEnd: isFront && canInteract()
+          ? (d) => onDragEnd(d.velocity.pixelsPerSecond)
+          : null,
+      child: AnimatedBuilder(
+        animation: dragOffset,
+        builder: (context, _) {
+          final offset = isFront ? dragOffset.value : Offset.zero;
+          // Reduced rotation slightly for a cleaner look
+          final angle = isFront ? (offset.dx / 500.0).clamp(-0.15, 0.15) : 0.0;
+
+          return Transform.translate(
+            offset: offset,
+            child: Transform.rotate(
+              angle: angle,
+              child: child,
+            ),
+          );
+        },
+      ),
+    );
   }
 }

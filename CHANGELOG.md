@@ -1,3 +1,3 @@
-## 0.0.4
+## 0.0.5
 
-Changes to many files
+Fixed the jittering effect when card is swiped.

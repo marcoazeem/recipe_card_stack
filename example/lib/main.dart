@@ -68,7 +68,11 @@ class RecipeStackDemo extends StatelessWidget {
       scaleGap: 0.05,
       verticalGap: 70.0,
       cardBuilder: (context, recipe, index, isFrontCard) {
-        return DemoRecipeCard(recipe: recipe, isFrontCard: isFrontCard);
+        return DemoRecipeCard(
+          key: ValueKey(recipe.title), // use a real id if you have one
+          recipe: recipe,
+          isFrontCard: isFrontCard,
+        );
       },
       onSwipe: (index, direction, recipe) {
         debugPrint('Swiped ${recipe.title} to $direction');
@@ -114,95 +118,203 @@ class DemoRecipeCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.black, width: 2),
       ),
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 220),
-        switchInCurve: Curves.easeOut,
-        switchOutCurve: Curves.easeOut,
-        transitionBuilder: (child, animation) {
-          return FadeTransition(opacity: animation, child: child);
-        },
-        child: isFrontCard
-            ? _buildFrontLayout(key: const ValueKey('front'))
-            : _buildBackLayout(key: const ValueKey('back')),
-      ),
-    );
-  }
-
-  Widget _buildFrontLayout({required Key key}) {
-    return Padding(
-      key: key,
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
-          Center(
-            child: Text(
-              recipe.title,
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(recipe.description, style: const TextStyle(fontSize: 16)),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                "Serves: ${recipe.serves}",
-                style: const TextStyle(fontSize: 16),
-              ),
-              Text(
-                "Prep: ${recipe.prepTime}",
-                style: const TextStyle(fontSize: 16),
-              ),
-              Text(
-                "Cook: ${recipe.cookTime}",
-                style: const TextStyle(fontSize: 16),
-              ),
-            ],
-          ),
-          const Spacer(),
+          // Back "tab" title strip (always present, stable)
           Align(
-            alignment: Alignment.bottomRight,
-            child: Text(
-              "Read Recipe",
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-                decoration: TextDecoration.underline,
-                color: Colors.black.withOpacity(0.8),
+            alignment: Alignment.bottomLeft,
+            child: Container(
+              width: double.infinity,
+              color: Colors.black.withOpacity(0.25),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Text(
+                recipe.title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
+          ),
+
+          // Front details: REAL fade-in on focus change
+          FocusFade(
+            isFocused: isFrontCard,
+            fadeIn: const Duration(milliseconds: 260),
+            fadeOut: const Duration(milliseconds: 120),
+            curveIn: Curves.easeOutCubic,
+            curveOut: Curves.easeOut,
+            // Optional: tiny delay so it starts after the swipe settles a bit
+            // (feels more premium, less "UI fighting")
+            delayOnFocus: const Duration(milliseconds: 60),
+            child: _FrontDetails(recipe: recipe),
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildBackLayout({required Key key}) {
-    return Stack(
-      key: key,
-      children: [
-        Positioned.fill(child: Container(color: recipe.color)),
-        Align(
-          alignment: Alignment.bottomLeft,
-          child: Container(
-            width: double.infinity,
-            color: Colors.black.withOpacity(0.25),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Text(
-              recipe.title,
-              style: const TextStyle(
-                fontSize: 16,
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
+class _FrontDetails extends StatelessWidget {
+  final DemoRecipe recipe;
+
+  const _FrontDetails({required this.recipe});
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      // Only interactable when focused (FocusFade already handles)
+      ignoring: false,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Text(
+                recipe.title,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
             ),
-          ),
+            const SizedBox(height: 16),
+            Text(recipe.description, style: const TextStyle(fontSize: 16)),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "Serves: ${recipe.serves}",
+                  style: const TextStyle(fontSize: 16),
+                ),
+                Text(
+                  "Prep: ${recipe.prepTime}",
+                  style: const TextStyle(fontSize: 16),
+                ),
+                Text(
+                  "Cook: ${recipe.cookTime}",
+                  style: const TextStyle(fontSize: 16),
+                ),
+              ],
+            ),
+            const Spacer(),
+            Align(
+              alignment: Alignment.bottomRight,
+              child: Text(
+                "Read Recipe",
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  decoration: TextDecoration.underline,
+                  color: Colors.black.withOpacity(0.8),
+                ),
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
+    );
+  }
+}
+
+/// A fade wrapper that *actually animates* when focus changes.
+/// This avoids the common "it popped in" issue when widgets rebuild
+/// already in the focused state.
+class FocusFade extends StatefulWidget {
+  const FocusFade({
+    super.key,
+    required this.isFocused,
+    required this.child,
+    this.fadeIn = const Duration(milliseconds: 240),
+    this.fadeOut = const Duration(milliseconds: 140),
+    this.curveIn = Curves.easeOut,
+    this.curveOut = Curves.easeOut,
+    this.delayOnFocus = Duration.zero,
+  });
+
+  final bool isFocused;
+  final Widget child;
+
+  final Duration fadeIn;
+  final Duration fadeOut;
+  final Curve curveIn;
+  final Curve curveOut;
+
+  /// Optional delay before starting fade in (helps after swipe)
+  final Duration delayOnFocus;
+
+  @override
+  State<FocusFade> createState() => _FocusFadeState();
+}
+
+class _FocusFadeState extends State<FocusFade>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late Animation<double> _opacity;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _controller = AnimationController(
+      vsync: this,
+      duration: widget.fadeIn,
+      reverseDuration: widget.fadeOut,
+      value: widget.isFocused ? 1.0 : 0.0,
+    );
+
+    _opacity = CurvedAnimation(
+      parent: _controller,
+      curve: widget.curveIn,
+      reverseCurve: widget.curveOut,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant FocusFade oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // If timing/curves change, refresh controller settings
+    if (oldWidget.fadeIn != widget.fadeIn) _controller.duration = widget.fadeIn;
+    if (oldWidget.fadeOut != widget.fadeOut) {
+      _controller.reverseDuration = widget.fadeOut;
+    }
+
+    final becameFocused = !oldWidget.isFocused && widget.isFocused;
+    final becameUnfocused = oldWidget.isFocused && !widget.isFocused;
+
+    if (becameFocused) {
+      if (widget.delayOnFocus == Duration.zero) {
+        _controller.forward();
+      } else {
+        Future.delayed(widget.delayOnFocus, () {
+          if (!mounted) return;
+          // only fade in if still focused
+          if (widget.isFocused) _controller.forward();
+        });
+      }
+    } else if (becameUnfocused) {
+      _controller.reverse();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      ignoring: !widget.isFocused,
+      child: FadeTransition(opacity: _opacity, child: widget.child),
     );
   }
 }
